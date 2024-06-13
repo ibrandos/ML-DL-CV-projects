@@ -1,0 +1,81 @@
+import cv2
+import mediapipe as mp
+import numpy as np
+import tensorflow as tf
+
+# Charger le modèle pré-entraîné
+model = tf.keras.models.load_model('my_modeltest_improved.keras')
+
+# Initialisation de la capture vidéo depuis la caméra par défaut (index 0)
+cap = cv2.VideoCapture(0)
+
+# Vérification de l'ouverture de la capture vidéo
+if not cap.isOpened():
+    print("Erreur: Impossible d'ouvrir la caméra.")
+    exit()
+
+# Initialisation du module MediaPipe Hands
+mp_hands = mp.solutions.hands
+hands = mp_hands.Hands(static_image_mode=False, max_num_hands=2, min_detection_confidence=0.5, min_tracking_confidence=0.5)
+mp_drawing = mp.solutions.drawing_utils
+
+# Dictionnaire des étiquettes
+labels_dict = {0: 'radio', 1: 'taxi', 2:'lourd' ,3:'labes',4: ' demande', 5: 'affaires sociales', 6: 'sport'}
+predicted_words = []  # Liste pour stocker les mots prédits
+
+while True:
+    ret, frame = cap.read()
+
+    H, W, _ = frame.shape
+
+    frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+
+    results = hands.process(frame_rgb)
+    
+    if results.multi_hand_landmarks:
+        for hand_landmarks in results.multi_hand_landmarks:
+            mp_drawing.draw_landmarks(frame, hand_landmarks, mp_hands.HAND_CONNECTIONS, 
+                                      mp.solutions.drawing_styles.get_default_hand_landmarks_style(), 
+                                      mp.solutions.drawing_styles.get_default_hand_connections_style())
+            
+        data_combined = []     
+        for hand_landmarks in results.multi_hand_landmarks:
+            if hand_landmarks.landmark:
+                for landmark in hand_landmarks.landmark:
+                    data_combined.append(landmark.x)
+                    data_combined.append(landmark.y)
+
+        # Vérifier si data_combined contient le bon nombre de caractéristiques
+        if len(data_combined) == 42 * 2:  # 42 caractéristiques par main
+            # Convertir en tableau numpy et normaliser les valeurs
+            data_combined_np = np.array(data_combined)
+            data_combined_np = (data_combined_np - data_combined_np.min()) / (data_combined_np.max() - data_combined_np.min())
+            
+            # Adapter les données à la forme attendue par le modèle
+            data_combined_np = data_combined_np.reshape(1, -1)  # Reshape to match expected input shape
+            
+            # Faire la prédiction
+            prediction = model.predict(data_combined_np)
+            predicted_class_index = np.argmax(prediction)
+            predicted_character = labels_dict[predicted_class_index]
+            predicted_words.append(predicted_character)
+            
+            # Calculer l'accuracy pour chaque prédiction
+            accuracy = np.max(prediction) * 100
+            
+            # Affichage des mots prédits à côté des landmarks détectés
+            cv2.putText(frame, f'Predicted: {predicted_character}', (10, H - 20), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 0), 2,
+                        cv2.LINE_AA)
+            cv2.putText(frame, f'Accuracy: {accuracy:.2f}%', (10, H - 60), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
+
+    cv2.imshow('frame', frame)
+
+    # Attendre 1 milliseconde pour détecter une touche
+    key = cv2.waitKey(1) & 0xFF
+
+    # Si la touche 'q' est enfoncée, quitter la boucle
+    if key == ord('q'):
+        break
+
+cap.release()
+cv2.destroyAllWindows()
