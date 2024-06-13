@@ -1,0 +1,44 @@
+import os
+import pickle
+import mediapipe as mp
+import cv2
+
+# Initialiser la détection des mains
+mp_hands = mp.solutions.hands
+hands = mp_hands.Hands(static_image_mode=False, min_detection_confidence=0.5, max_num_hands=2)
+
+# Définir le répertoire de données
+DATA_DIR = './7images_test'
+data = []
+labels = []
+
+for dir_ in os.listdir(DATA_DIR):
+    for img_path in os.listdir(os.path.join(DATA_DIR, dir_)):
+        if not img_path.endswith(('.jpg', '.jpeg', '.png')):
+            continue  # Ignorer les fichiers qui ne sont pas des images
+
+        landmarks_right = []  # Coordonnées des landmarks de la main droite
+        landmarks_left = []  # Coordonnées des landmarks de la main gauche
+
+        img = cv2.imread(os.path.join(DATA_DIR, dir_, img_path))
+        img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+
+        results = hands.process(img_rgb)
+        if results.multi_hand_landmarks and len(results.multi_hand_landmarks) == 2:
+            for idx, hand_landmarks in enumerate(results.multi_hand_landmarks):
+                if results.multi_handedness[idx].classification[0].label == 'Left':
+                    for landmark in hand_landmarks.landmark:
+                        # Ajouter les coordonnées des landmarks de la main gauche
+                        landmarks_left.extend([landmark.x, landmark.y])
+                elif results.multi_handedness[idx].classification[0].label == 'Right':
+                    for landmark in hand_landmarks.landmark:
+                        # Ajouter les coordonnées des landmarks de la main droite
+                        landmarks_right.extend([landmark.x, landmark.y])
+
+            # Ajouter les coordonnées des landmarks de la main droite et gauche séparément
+            data.append({'right_hand': landmarks_right, 'left_hand': landmarks_left})
+            labels.append(dir_)
+
+# Sauvegarder les données
+with open('7images_test_separate.pickle', 'wb') as f:
+    pickle.dump({'data': data, 'labels': labels}, f)
