@@ -1,0 +1,54 @@
+import numpy as np
+import pickle
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import accuracy_score
+from sklearn.preprocessing import LabelEncoder
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Dense, Dropout, Input
+from tensorflow.keras.callbacks import EarlyStopping
+from tensorflow.keras.optimizers import Adam
+
+# Charger les nouvelles données
+data_dict = pickle.load(open('./7images_test_separate.pickle', 'rb'))
+
+data = np.asarray([np.concatenate((data_point['right_hand'], data_point['left_hand'])) for data_point in data_dict['data']])
+labels = np.asarray(data_dict['labels'])
+
+# Encoder les étiquettes
+label_encoder = LabelEncoder()
+labels_encoded = label_encoder.fit_transform(labels)
+
+# Créer le modèle séquentiel
+model = Sequential()
+
+# Couche d'entrée explicite
+model.add(Input(shape=(data.shape[1],)))
+
+# Ajouter des couches au modèle
+model.add(Dense(256, activation='relu'))
+model.add(Dropout(0.5))
+model.add(Dense(128, activation='relu'))
+model.add(Dropout(0.5))
+model.add(Dense(64, activation='relu'))
+model.add(Dropout(0.5))
+model.add(Dense(len(np.unique(labels_encoded)), activation='softmax'))
+
+# Compiler le modèle
+optimizer = Adam(learning_rate=0.001)
+model.compile(optimizer=optimizer, loss='sparse_categorical_crossentropy', metrics=['accuracy'])
+
+# Diviser les données en ensembles de formation et de test
+x_train, x_test, y_train, y_test = train_test_split(data, labels_encoded, test_size=0.2, shuffle=True, stratify=labels_encoded)
+
+# Définir le callback pour l'arrêt précoce
+early_stopping = EarlyStopping(monitor='val_loss', patience=5, restore_best_weights=True)
+
+# Entraîner le modèle avec des données de validation
+history = model.fit(x_train, y_train, epochs=50, batch_size=32, validation_split=0.2, callbacks=[early_stopping])
+
+# Évaluer le modèle sur l'ensemble de test
+test_loss, test_accuracy = model.evaluate(x_test, y_test)
+
+print("Test accuracy:", test_accuracy*100)
+# Sauvegarder le modèle
+model.save('my_modeltest_improved.keras')
